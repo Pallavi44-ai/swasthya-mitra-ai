@@ -2,7 +2,7 @@ import streamlit as st
 from google import genai
 from datetime import datetime
 
-# ─── PAGE CONFIG ────────────────────────────────────────────────────────────
+# ── PAGE CONFIG ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Swasthya Mitra AI",
     page_icon="🌿",
@@ -10,340 +10,236 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── SYSTEM PROMPT ──────────────────────────────────────────────────────────
+# ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """
-Follow all instructions strictly. Do not ignore any rule.
+You are "Swasthya Mitra AI", a compassionate, multilingual AI health assistant for rural elderly users.
 
-You are "Swasthya Mitra AI", a compassionate, multilingual AI assistant designed for rural elderly users with low literacy and limited internet access.
+LANGUAGE: Always reply in the SAME language the user writes in.
+Supported: English, Kannada, Hindi, Telugu. Use very simple words.
 
-Your purpose:
-- Provide basic health guidance (NOT diagnosis)
-- Act as a friendly emotional companion
-- Help manage medicine routines and reminders
-- Read and explain doctor prescriptions (from OCR text)
-- Detect emotional state (loneliness, sadness)
-- Communicate respectfully based on gender and culture
+RESPECT: 
+- Male → Sir, Anna, Uncle
+- Female → Madam, Akka, Aunty
+- Always warm, calm, respectful.
 
-LANGUAGE RULES:
-Always respond in the SAME language as the user input.
-Supported languages: English, Kannada, Hindi, Telugu
-If user mixes languages respond in dominant language.
-Use VERY SIMPLE words. Avoid medical jargon.
+RULES:
+- NEVER give a medical diagnosis.
+- ALWAYS say: "Please consult a doctor if symptoms persist."
+- Keep responses SHORT and simple.
+- Speak like a caring human, not a robot.
 
-RESPECT & GENDER HANDLING:
-Male use: "Sir", "Anna", "Uncle"
-Female use: "Madam", "Akka", "Aunty"
-Unknown: polite neutral tone
-Always be respectful, warm, and calm.
+HEALTH: If user mentions symptoms → give simple home advice (rest, water) → suggest doctor.
 
-CORE BEHAVIOR RULES:
-NEVER give final medical diagnosis.
-ALWAYS include: "Please consult a doctor if symptoms persist."
-Keep responses SHORT and voice-friendly.
-Speak like a caring human, not a robot.
+PRESCRIPTION: If user pastes prescription text →
+- Explain each medicine simply (morning/afternoon/night)
+- BD = 2 times a day, OD = once a day, TDS = 3 times a day
+- Ask: "Should I set reminders for these medicines?"
 
-HEALTH MODE:
-If user mentions symptoms:
-- Identify common possible issue at simple level
-- Give basic home advice like rest, water, etc.
-- Suggest doctor visit if needed
-- Keep explanation simple and short
+EMOTIONAL: If user sounds sad or lonely → respond with empathy → offer to talk.
 
-PRESCRIPTION MODE:
-If input looks like a prescription or OCR text:
-- DO NOT change medicine names
-- Explain dosage clearly: Morning, Afternoon, Night
-- Convert medical abbreviations: BD means 2 times a day, OD means once daily, TDS means 3 times a day
-- Keep explanation simple
-Then ask: "Should I set reminders for these medicines?"
-
-MEDICINE REMINDER MODE:
-If user says "Remind me to take medicine at 8":
-Respond: "Okay, I will remind you at 8."
-
-EMOTIONAL COMPANION MODE:
-If user sounds sad or lonely:
-- Respond with empathy
-- Offer conversation
-- Say things like: "I am here with you." or "Would you like to talk or hear a story?"
-If repeated sadness: Gently suggest contacting family.
-
-EMERGENCY MODE:
-If user says chest pain, can't breathe, or emergency:
-Respond urgently:
-"Please go to the nearest hospital immediately."
-Suggest calling family member and calling 108.
-
-OUTPUT STYLE:
-- Plain text only
-- Short sentences
-- Easy to understand
-- Friendly and human-like tone
-- Optimized for voice playback
+EMERGENCY: If user says chest pain / can't breathe / emergency →
+Immediately say: "Please go to the nearest hospital! Call 108 now!"
 
 PRIORITY: CARE + CLARITY + RESPECT + SIMPLICITY
-
-Always behave like a caring assistant who supports both HEALTH and EMOTIONAL WELL-BEING of the elderly user.
 """
 
-# ─── CSS STYLING ─────────────────────────────────────────────────────────────
+# ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
 
-:root {
-    --saffron:    #E8752A;
-    --deep-green: #1A6B3C;
-    --soft-green: #2E9E5B;
-    --cream:      #FDF8F0;
-    --warm-white: #FFFDF7;
-    --text-dark:  #1C2B1E;
-    --text-mid:   #3D5A42;
-    --border:     #D4E8D8;
-    --shadow:     rgba(26,107,60,0.12);
-    --google-blue: #4285F4;
-}
-
 html, body, [class*="css"] {
-    font-family: 'Nunito', sans-serif;
-    background-color: var(--cream);
+    font-family: 'Nunito', sans-serif !important;
 }
 
-.main-header {
-    background: linear-gradient(135deg, var(--deep-green) 0%, var(--soft-green) 100%);
-    border-radius: 20px;
-    padding: 28px 32px;
-    margin-bottom: 24px;
-    box-shadow: 0 8px 32px var(--shadow);
+/* Header banner */
+.app-header {
+    background: linear-gradient(135deg, #1A6B3C, #2E9E5B);
+    border-radius: 18px;
+    padding: 22px 28px;
+    margin-bottom: 20px;
     display: flex;
     align-items: center;
-    gap: 16px;
-    position: relative;
-    overflow: hidden;
+    gap: 14px;
+    box-shadow: 0 6px 24px rgba(26,107,60,0.25);
+}
+.app-header h1 { color: white; font-size: 22px; font-weight: 800; margin: 0; }
+.app-header p  { color: rgba(255,255,255,0.85); font-size: 12px; margin: 3px 0 0; }
+.badge {
+    display:inline-block;
+    background:rgba(66,133,244,0.25);
+    border:1px solid rgba(66,133,244,0.5);
+    color:#90CAF9; font-size:10px; font-weight:700;
+    padding:2px 8px; border-radius:50px; margin-top:5px;
 }
 
-.main-header::before {
-    content: '';
-    position: absolute;
-    top: -40px; right: -40px;
-    width: 160px; height: 160px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 50%;
+/* Native chat message tweaks */
+[data-testid="stChatMessage"] {
+    border-radius: 16px !important;
+    padding: 4px 8px !important;
 }
 
-.header-icon { font-size: 52px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
-
-.header-text h1 { color: white; font-size: 26px; font-weight: 800; margin: 0; }
-.header-text p  { color: rgba(255,255,255,0.82); font-size: 13px; margin: 4px 0 0 0; }
-
-.gemini-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(66,133,244,0.15);
-    border: 1px solid rgba(66,133,244,0.4);
-    color: #4285F4;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 50px;
-    letter-spacing: 0.5px;
-    margin-top: 6px;
-}
-
-.user-bubble {
-    background: linear-gradient(135deg, var(--saffron) 0%, #D4621E 100%);
-    color: white;
-    border-radius: 18px 18px 4px 18px;
-    padding: 14px 18px;
-    margin: 8px 0 8px 60px;
-    font-size: 15px;
-    line-height: 1.6;
-    box-shadow: 0 3px 12px rgba(232,117,42,0.3);
-    word-wrap: break-word;
-}
-
-.bot-bubble {
-    background: var(--warm-white);
-    color: var(--text-dark);
-    border-radius: 18px 18px 18px 4px;
-    padding: 14px 18px;
-    margin: 8px 60px 8px 0;
-    font-size: 15px;
-    line-height: 1.7;
-    box-shadow: 0 3px 12px var(--shadow);
-    border: 1px solid var(--border);
-    word-wrap: break-word;
-}
-
-.emergency-bubble {
-    background: linear-gradient(135deg, #D32F2F, #B71C1C);
-    color: white;
-    border-radius: 18px;
-    padding: 16px 20px;
-    margin: 8px 0;
-    font-size: 15px;
-    font-weight: 700;
-    line-height: 1.6;
-    border-left: 5px solid #FF5252;
-    box-shadow: 0 4px 16px rgba(211,47,47,0.35);
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { box-shadow: 0 4px 16px rgba(211,47,47,0.35); }
-    50%       { box-shadow: 0 4px 28px rgba(211,47,47,0.65); }
-}
-
-.msg-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-    opacity: 0.65;
-}
-
-[data-testid="stSidebar"] {
-    background: var(--warm-white);
-    border-right: 1px solid var(--border);
-}
-
-.sidebar-title {
-    font-size: 13px;
-    font-weight: 800;
-    color: var(--deep-green);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    margin-bottom: 10px;
-}
-
-.reminder-card {
-    background: white;
-    border-radius: 10px;
-    padding: 10px 14px;
-    margin: 6px 0;
-    border-left: 4px solid var(--soft-green);
-    font-size: 13px;
-    color: var(--text-dark);
-    box-shadow: 0 2px 8px var(--shadow);
-}
-
-.tip-card {
-    background: linear-gradient(135deg, #E8F5E9, #F1F8E9);
-    border-radius: 12px;
-    padding: 14px;
-    font-size: 13px;
-    color: var(--text-mid);
-    border: 1px solid #C8E6C9;
-    line-height: 1.6;
-}
-
-.stTextArea textarea {
+/* Chat input box — make it very visible */
+[data-testid="stChatInput"] textarea {
+    background: white !important;
+    color: #1C2B1E !important;
+    border: 2.5px solid #2E9E5B !important;
     border-radius: 14px !important;
-    border: 2px solid var(--border) !important;
     font-family: 'Nunito', sans-serif !important;
-    font-size: 15px !important;
-    background: var(--warm-white) !important;
+    font-size: 16px !important;
+    min-height: 54px !important;
+}
+[data-testid="stChatInput"] textarea:focus {
+    border-color: #1A6B3C !important;
+    box-shadow: 0 0 0 3px rgba(46,158,91,0.2) !important;
+}
+[data-testid="stChatInput"] textarea::placeholder {
+    color: #7DAF87 !important;
+    font-size: 14px !important;
 }
 
-.stTextArea textarea:focus {
-    border-color: var(--soft-green) !important;
-    box-shadow: 0 0 0 3px rgba(46,158,91,0.15) !important;
+/* Send button inside chat input */
+[data-testid="stChatInputSubmitButton"] {
+    background: #2E9E5B !important;
+    border-radius: 10px !important;
 }
 
-.stButton > button {
+/* Quick prompt buttons */
+div[data-testid="column"] .stButton > button {
     border-radius: 50px !important;
     font-family: 'Nunito', sans-serif !important;
     font-weight: 700 !important;
-    transition: all 0.2s ease !important;
+    font-size: 13px !important;
+    border: 1.5px solid #A8D5B5 !important;
+    background: white !important;
+    color: #1A6B3C !important;
+    transition: all 0.2s !important;
 }
-
-.stButton > button:hover {
+div[data-testid="column"] .stButton > button:hover {
+    background: #E8F5E9 !important;
+    border-color: #2E9E5B !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 6px 16px var(--shadow) !important;
 }
 
-.status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: #E8F5E9;
-    color: var(--deep-green);
-    font-size: 11px;
-    font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 50px;
-    letter-spacing: 0.5px;
+/* Mic section */
+.mic-box {
+    background: white;
+    border: 2px dashed #2E9E5B;
+    border-radius: 14px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+.mic-title {
+    font-size: 13px; font-weight: 800;
+    color: #1A6B3C; margin-bottom: 8px;
+}
+.mic-result {
+    background: #E8F5E9; border-radius: 10px;
+    padding: 10px 14px; font-size: 14px;
+    color: #1A6B3C; font-weight: 600;
+    border-left: 4px solid #2E9E5B;
+    margin-top: 8px; text-align: left;
 }
 
+/* Reminder card */
+.reminder-card {
+    background: white; border-radius: 10px;
+    padding: 9px 13px; margin: 5px 0;
+    border-left: 4px solid #2E9E5B;
+    font-size: 13px; color: #1C2B1E;
+    box-shadow: 0 2px 8px rgba(26,107,60,0.1);
+}
+.tip-card {
+    background: linear-gradient(135deg,#E8F5E9,#F1F8E9);
+    border-radius: 12px; padding: 12px;
+    font-size: 13px; color: #3D5A42;
+    border: 1px solid #C8E6C9; line-height: 1.6;
+}
+.sidebar-title {
+    font-size: 12px; font-weight: 800; color: #1A6B3C;
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;
+}
 .status-dot {
-    width: 7px; height: 7px;
-    background: var(--soft-green);
-    border-radius: 50%;
-    animation: blink 1.5s infinite;
+    display:inline-block; width:8px; height:8px;
+    background:#2E9E5B; border-radius:50%;
+    animation: blink 1.5s infinite; margin-right:5px;
 }
-
-@keyframes blink {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.3; }
-}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
 #MainMenu, footer, header { visibility: hidden; }
-.block-container { padding-top: 1.5rem !important; }
+.block-container { padding-top: 1rem !important; max-width: 780px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─── CONSTANTS ───────────────────────────────────────────────────────────────
+# ── CONSTANTS ─────────────────────────────────────────────────────────────────
 EMERGENCY_KEYWORDS = [
-    "chest pain", "can't breathe", "cannot breathe",
-    "emergency", "heart attack", "unconscious", "stroke",
-    "ಎದೆ ನೋವು", "ಉಸಿರಾಟ", "ಅಪಾಯ",
-    "सीने में दर्द", "सांस नहीं", "आपातकाल",
-    "గుండె నొప్పి", "శ్వాస", "అత్యవసర"
+    "chest pain","can't breathe","cannot breathe","heart attack",
+    "emergency","unconscious","stroke","not breathing",
+    "ಎದೆ ನೋವು","ಉಸಿರಾಟ","ಅಪಾಯ",
+    "सीने में दर्द","सांस नहीं","आपातकाल",
+    "గుండె నొప్పి","శ్వాస","అత్యవసర"
 ]
 
+EMERGENCY_RESPONSE = {
+    "English": "🚨 **EMERGENCY!**\n\nPlease go to the **nearest hospital IMMEDIATELY!**\n\n📞 **Call 108** (Ambulance) right now!\n\nAsk a family member or neighbour to help you. Do not wait!",
+    "Kannada": "🚨 **ತುರ್ತು ಸ್ಥಿತಿ!**\n\nತಕ್ಷಣ ಹತ್ತಿರದ ಆಸ್ಪತ್ರೆಗೆ ಹೋಗಿ!\n\n📞 **108** ಕರೆ ಮಾಡಿ!\n\nಕುಟುಂಬ ಸದಸ್ಯರನ್ನು ಕರೆಯಿರಿ!",
+    "Hindi":   "🚨 **आपातकाल!**\n\nतुरंत नजदीकी अस्पताल जाएं!\n\n📞 **108** पर अभी कॉल करें!\n\nपरिवार को बुलाएं!",
+    "Telugu":  "🚨 **అత్యవసరం!**\n\nవెంటనే దగ్గరలోని ఆసుపత్రికి వెళ్ళండి!\n\n📞 **108** కు ఇప్పుడే కాల్ చేయండి!\n\nకుటుంబ సభ్యుడిని పిలవండి!",
+}
+
+WELCOME = {
+    "English": "🙏 Namaste! I am **Swasthya Mitra**, your health companion.\n\nI can help you with:\n- ❓ Health questions & advice\n- 🧾 Reading & explaining prescriptions\n- ⏰ Medicine reminders\n- 🤝 Talking when you feel lonely\n\n**How can I help you today?**",
+    "Kannada": "🙏 ನಮಸ್ಕಾರ! ನಾನು **ಸ್ವಾಸ್ಥ್ಯ ಮಿತ್ರ**.\n\n- ❓ ಆರೋಗ್ಯ ಸಲಹೆ\n- 🧾 ಪ್ರಿಸ್ಕ್ರಿಪ್ಶನ್ ವಿವರಣೆ\n- ⏰ ಔಷಧ ರಿಮೈಂಡರ್\n- 🤝 ಮಾತನಾಡಲು\n\n**ಇಂದು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?**",
+    "Hindi":   "🙏 नमस्ते! मैं **स्वास्थ्य मित्र** हूं।\n\n- ❓ स्वास्थ्य सलाह\n- 🧾 प्रिस्क्रिप्शन पढ़ना\n- ⏰ दवाई याद दिलाना\n- 🤝 बात करना\n\n**आज कैसे मदद करूं?**",
+    "Telugu":  "🙏 నమస్కారం! నేను **స్వాస్థ్య మిత్ర**.\n\n- ❓ ఆరోగ్య సలహా\n- 🧾 ప్రిస్క్రిప్షన్ వివరణ\n- ⏰ మందు రిమైండర్\n- 🤝 మాట్లాడడం\n\n**ఈరోజు ఎలా సహాయపడాలి?**",
+}
+
 QUICK_PROMPTS = {
-    "English": ["I have a headache 🤕", "I feel lonely 😔", "Explain my prescription 📄", "Set medicine reminder ⏰"],
-    "Kannada": ["ನನಗೆ ತಲೆನೋವು 🤕", "ನಾನು ಒಂಟಿಯಾಗಿದ್ದೇನೆ 😔", "ನನ್ನ ಪ್ರಿಸ್ಕ್ರಿಪ್ಶನ್ ವಿವರಿಸಿ 📄", "ಔಷಧ ರಿಮೈಂಡರ್ ⏰"],
-    "Hindi":   ["मुझे सिरदर्द है 🤕", "मैं अकेला हूं 😔", "प्रिस्क्रिप्शन समझाइए 📄", "दवाई याद दिलाइए ⏰"],
-    "Telugu":  ["నాకు తలనొప్పి 🤕", "నేను ఒంటరిగా ఉన్నాను 😔", "ప్రిస్క్రిప్షన్ వివరించండి 📄", "మందు రిమైండర్ ⏰"],
+    "English": ["🤕 I have a headache", "😔 I feel lonely", "📄 Explain my prescription", "⏰ Medicine reminder"],
+    "Kannada": ["🤕 ತಲೆನೋವು ಇದೆ",    "😔 ಒಂಟಿಯಾಗಿದ್ದೇನೆ",     "📄 ಪ್ರಿಸ್ಕ್ರಿಪ್ಶನ್ ವಿವರಿಸಿ","⏰ ಔಷಧ ರಿಮೈಂಡರ್"],
+    "Hindi":   ["🤕 सिरदर्द है",       "😔 अकेला/अकेली हूं",     "📄 प्रिस्क्रिप्शन समझाइए", "⏰ दवाई याद दिलाइए"],
+    "Telugu":  ["🤕 తలనొప్పి",         "😔 ఒంటరిగా ఉన్నాను",    "📄 ప్రిస్క్రిప్షన్ వివరించండి","⏰ మందు రిమైండర్"],
 }
 
 DAILY_TIPS = {
-    "English": "💧 Drink 6–8 glasses of water daily. Stay hydrated for good health!",
-    "Kannada": "💧 ದಿನಕ್ಕೆ 6-8 ಲೋಟ ನೀರು ಕುಡಿಯಿರಿ. ಆರೋಗ್ಯಕ್ಕಾಗಿ ನೀರು ಮುಖ್ಯ!",
-    "Hindi":   "💧 रोज 6-8 गिलास पानी पीएं। स्वस्थ रहें!",
-    "Telugu":  "💧 రోజూ 6-8 గ్లాసుల నీరు తాగండి. ఆరోగ్యంగా ఉండండి!",
+    "English": "💧 Drink 6–8 glasses of water daily. Stay hydrated!",
+    "Kannada": "💧 ದಿನಕ್ಕೆ 6-8 ಲೋಟ ನೀರು ಕುಡಿಯಿರಿ!",
+    "Hindi":   "💧 रोज 6-8 गिलास पानी पीएं!",
+    "Telugu":  "💧 రోజూ 6-8 గ్లాసుల నీరు తాగండి!",
 }
 
-WELCOME_MSG = {
-    "English": "🙏 Namaste! I am Swasthya Mitra, your health companion.\n\nI can help you with:\n• Health questions & advice\n• Reading prescriptions\n• Medicine reminders\n• Talking when you feel lonely\n\nHow can I help you today?",
-    "Kannada": "🙏 ನಮಸ್ಕಾರ! ನಾನು ಸ್ವಾಸ್ಥ್ಯ ಮಿತ್ರ.\n\n• ಆರೋಗ್ಯ ಸಲಹೆ\n• ಪ್ರಿಸ್ಕ್ರಿಪ್ಶನ್ ಓದುವುದು\n• ಔಷಧ ರಿಮೈಂಡರ್\n• ಮಾತನಾಡಲು\n\nಇಂದು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
-    "Hindi":   "🙏 नमस्ते! मैं स्वास्थ्य मित्र हूं।\n\n• स्वास्थ्य सलाह\n• प्रिस्क्रिप्शन पढ़ना\n• दवाई याद दिलाना\n• बात करना\n\nआज कैसे मदद करूं?",
-    "Telugu":  "🙏 నమస్కారం! నేను స్వాస్థ్య మిత్ర.\n\n• ఆరోగ్య సలహా\n• ప్రిస్క్రిప్షన్ చదవడం\n• మందు రిమైండర్\n• మాట్లాడడం\n\nఈరోజు ఎలా సహాయపడాలి?",
+PLACEHOLDERS = {
+    "English": "Type your message here and press Enter ↵  (or use mic below)",
+    "Kannada": "ಇಲ್ಲಿ ಸಂದೇಶ ಟೈಪ್ ಮಾಡಿ ಮತ್ತು Enter ↵ ಒತ್ತಿ",
+    "Hindi":   "यहाँ संदेश लिखें और Enter ↵ दबाएं",
+    "Telugu":  "ఇక్కడ సందేశం టైప్ చేసి Enter ↵ నొక్కండి",
 }
 
-EMERGENCY_RESPONSE = {
-    "English": "🚨 EMERGENCY ALERT!\n\nPlease go to the nearest hospital IMMEDIATELY.\n📞 Call 108 (Ambulance) right now.\nAsk a family member or neighbour to help you.",
-    "Kannada": "🚨 ತುರ್ತು ಸ್ಥಿತಿ!\n\nತಕ್ಷಣ ಹತ್ತಿರದ ಆಸ್ಪತ್ರೆಗೆ ಹೋಗಿ.\n📞 108 ಕರೆ ಮಾಡಿ.\nಕುಟುಂಬ ಸದಸ್ಯರನ್ನು ಕರೆಯಿರಿ.",
-    "Hindi":   "🚨 आपातकाल!\n\nतुरंत नजदीकी अस्पताल जाएं।\n📞 अभी 108 पर कॉल करें।\nपरिवार के किसी सदस्य को बुलाएं।",
-    "Telugu":  "🚨 అత్యవసర పరిస్థితి!\n\nవెంటనే దగ్గరలోని ఆసుపత్రికి వెళ్ళండి.\n📞 ఇప్పుడే 108 కు కాల్ చేయండి.\nకుటుంబ సభ్యుడిని పిలవండి.",
-}
+MIC_LANGS = {"English":"en-IN","Kannada":"kn-IN","Hindi":"hi-IN","Telugu":"te-IN"}
 
-# ─── SESSION STATE ────────────────────────────────────────────────────────────
-if "messages"  not in st.session_state: st.session_state.messages  = []
-if "language"  not in st.session_state: st.session_state.language  = "English"
-if "reminders" not in st.session_state: st.session_state.reminders = []
-if "api_key"   not in st.session_state: st.session_state.api_key   = ""
+# ── SESSION STATE ─────────────────────────────────────────────────────────────
+def init_state():
+    defaults = {
+        "messages":  [],
+        "language":  "English",
+        "reminders": [],
+        "api_key":   "",
+        "pending_prompt": None,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-# ─── HELPERS ─────────────────────────────────────────────────────────────────
+init_state()
+
+# ── HELPERS ───────────────────────────────────────────────────────────────────
 def is_emergency(text: str) -> bool:
     return any(kw in text.lower() for kw in EMERGENCY_KEYWORDS)
 
-def get_gemini_response(user_message: str) -> str:
-    """Send message to Gemini and return full response."""
-    
+def call_gemini(user_text: str) -> str:
+    """Call Gemini and return the reply string."""
+
     from google import genai
 
     API_KEY = st.session_state.get("api_key")
@@ -352,228 +248,224 @@ def get_gemini_response(user_message: str) -> str:
 
     response = client.models.generate_content(
         model="gemini-1.5-flash",
-        contents=user_message
+        contents=user_text
     )
 
     return response.text
-    # Build history for Gemini (role: user / model)
+    # Build history (all previous turns)
     history = []
-    for msg in st.session_state.messages:
-        role = "user" if msg["role"] == "user" else "model"
-        history.append({"role": role, "parts": [msg["content"]]})
+    for m in st.session_state.messages:
+        role = "user" if m["role"] == "user" else "model"
+        history.append({"role": role, "parts": [m["content"]]})
 
     chat = model.start_chat(history=history)
-    response = chat.send_message(user_message)
-    return response.text
+    resp = chat.send_message(user_text)
+    return resp.text
 
-# ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+def process_message(user_text: str):
+    """Add user msg, call AI or emergency, add reply — then rerun."""
+    user_text = user_text.strip()
+    if not user_text:
+        return
+
+    # 1. Save user message
+    st.session_state.messages.append({"role": "user", "content": user_text})
+
+    # 2. Emergency check
+    if is_emergency(user_text):
+        reply = EMERGENCY_RESPONSE.get(st.session_state.language, EMERGENCY_RESPONSE["English"])
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        st.rerun()
+        return
+
+    # 3. Call Gemini
+    try:
+        reply = call_gemini(user_text)
+    except Exception as e:
+        err = str(e)
+        if "API_KEY" in err.upper() or "invalid" in err.lower():
+            reply = "❌ Invalid API key. Please check your Gemini key in the sidebar."
+        elif "quota" in err.lower():
+            reply = "❌ API quota exceeded. Please try again later."
+        else:
+            reply = f"❌ Something went wrong: {err}"
+
+    st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.rerun()
+
+# ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown('<div class="sidebar-title">⚙️ Settings</div>', unsafe_allow_html=True)
-
-    # 🔑 API Key input
-    api_input = st.text_input(
-        "AIzaSyDszupZPws04WRcldiQwubzddAVCJkk7-k",
-        type="password",
-        value=st.session_state.get("api_key", ""),
-        placeholder="Paste your API key here...",
-        help="Get free key at https://aistudio.google.com"
-    )
-
-    if api_input:
-        st.session_state.api_key = api_input
+    # API Key
+    st.markdown('<div class="sidebar-title">⚙️ API Key</div>', unsafe_allow_html=True)
+    api_in = st.text_input("Gemini Key", type="password",
+                           value=st.session_state.api_key,
+                           placeholder="AIzaSy...",
+                           label_visibility="collapsed")
+    if api_in:
+        st.session_state.api_key = api_in
         st.success("✅ Key saved!", icon="🔐")
+    st.caption("Free key → [aistudio.google.com](https://aistudio.google.com)")
 
-    st.caption("👉 Get free key: https://aistudio.google.com")
+    st.divider()
 
-    st.markdown("---")
-
-    # 🌍 Language
+    # Language
     st.markdown('<div class="sidebar-title">🌍 Language</div>', unsafe_allow_html=True)
-
-    lang_options = ["English", "Kannada", "Hindi", "Telugu"]
-
-    lang = st.selectbox(
-        "Language",
-        lang_options,
-        index=lang_options.index(st.session_state.get("language", "English")),
+    langs = ["English","Kannada","Hindi","Telugu"]
+    st.session_state.language = st.selectbox(
+        "Lang", langs,
+        index=langs.index(st.session_state.language),
         label_visibility="collapsed"
     )
 
-    st.session_state.language = lang
+    st.divider()
 
-    st.markdown("---")
-    
-    API_KEY = st.session_state.get("api_key")
-
-if not API_KEY:
-    st.warning("⚠️ Please enter your API key in the sidebar")
-    st.stop()
-
-    # Medicine Reminders
+    # Reminders
     st.markdown('<div class="sidebar-title">⏰ Medicine Reminders</div>', unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        med_name = st.text_input("Medicine", placeholder="e.g. Metformin", label_visibility="collapsed")
-    with col2:
-        med_time = st.text_input("Time", placeholder="8:00 AM", label_visibility="collapsed")
+    c1, c2 = st.columns(2)
+    with c1: mname = st.text_input("Med", placeholder="e.g. Paracetamol", label_visibility="collapsed")
+    with c2: mtime = st.text_input("Time", placeholder="8:00 AM", label_visibility="collapsed")
 
     if st.button("➕ Add Reminder", use_container_width=True):
-        if med_name and med_time:
-            st.session_state.reminders.append({"name": med_name, "time": med_time})
-            st.success(f"✅ Reminder set for {med_name} at {med_time}!")
+        if mname and mtime:
+            st.session_state.reminders.append({"name": mname, "time": mtime})
+            st.success(f"✅ {mname} at {mtime}")
         else:
-            st.warning("Enter both medicine name and time.")
+            st.warning("Enter medicine name and time.")
 
     for i, r in enumerate(st.session_state.reminders):
-        col_r, col_d = st.columns([4, 1])
-        with col_r:
+        ca, cb = st.columns([4,1])
+        with ca:
             st.markdown(f'<div class="reminder-card">💊 <b>{r["name"]}</b> — {r["time"]}</div>', unsafe_allow_html=True)
-        with col_d:
-            if st.button("✕", key=f"del_{i}"):
+        with cb:
+            if st.button("✕", key=f"del{i}"):
                 st.session_state.reminders.pop(i)
                 st.rerun()
 
     if not st.session_state.reminders:
-        st.caption("No reminders yet. Add one above.")
+        st.caption("No reminders yet.")
 
-    st.markdown("---")
+    st.divider()
 
-    # Daily Tip
-    st.markdown('<div class="sidebar-title">💡 Daily Health Tip</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="tip-card">{DAILY_TIPS.get(lang, DAILY_TIPS["English"])}</div>', unsafe_allow_html=True)
+    # Daily tip
+    st.markdown('<div class="sidebar-title">💡 Daily Tip</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="tip-card">{DAILY_TIPS[st.session_state.language]}</div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-
+    st.divider()
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-    st.markdown(
-        '<div style="font-size:11px;color:#888;text-align:center;margin-top:10px;">Swasthya Mitra AI v1.0<br>Powered by Google Gemini ✨</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown('<div style="font-size:11px;color:#aaa;text-align:center;margin-top:6px;">Swasthya Mitra AI v2.0<br>✨ Google Gemini</div>', unsafe_allow_html=True)
 
-# ─── MAIN CONTENT ─────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="main-header">
-    <div class="header-icon">🌿</div>
-    <div class="header-text">
+# ── HEADER ────────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="app-header">
+    <div style="font-size:46px">🌿</div>
+    <div>
         <h1>Swasthya Mitra AI</h1>
         <p>Your caring health companion · स्वास्थ्य मित्र · ಆರೋಗ್ಯ ಮಿತ್ರ · స్వాస్థ్య మిత్ర</p>
-        <span class="gemini-badge">✨ Powered by Google Gemini</span>
+        <span class="badge">✨ Google Gemini · {datetime.now().strftime("%d %b %Y")}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Status row
-col_s1, col_s2 = st.columns([1, 1])
-with col_s1:
-    st.markdown('<span class="status-badge"><span class="status-dot"></span>Online · Ready to help</span>', unsafe_allow_html=True)
-with col_s2:
-    st.markdown(f'<div style="text-align:right;font-size:12px;color:#888;">{datetime.now().strftime("%d %b %Y, %I:%M %p")}</div>', unsafe_allow_html=True)
+# Status + API warning
+col1, col2 = st.columns([1,1])
+with col1:
+    st.markdown('<span class="status-dot"></span><span style="font-size:12px;font-weight:700;color:#1A6B3C;">Online · Ready</span>', unsafe_allow_html=True)
+with col2:
+    if not st.session_state.api_key:
+        st.error("⚠️ Add API key in sidebar →", icon="🔑")
 
-# API key warning
-if not st.session_state.api_key:
-    st.warning("⚠️ Enter your **Google Gemini API Key** in the sidebar to start. It's FREE at [aistudio.google.com](https://aistudio.google.com)", icon="🔑")
+st.divider()
 
-# ─── CHAT HISTORY ─────────────────────────────────────────────────────────────
-with st.container():
-    if not st.session_state.messages:
-        welcome = WELCOME_MSG.get(st.session_state.language, WELCOME_MSG["English"])
-        st.markdown(
-            f'<div class="bot-bubble"><div class="msg-label">🌿 Swasthya Mitra</div>{welcome}</div>',
-            unsafe_allow_html=True
-        )
+# ── CHAT HISTORY (uses st.chat_message — always renders correctly) ─────────────
+lang = st.session_state.language
 
-    for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            st.markdown(
-                f'<div class="user-bubble"><div class="msg-label" style="opacity:0.7">You</div>{msg["content"]}</div>',
-                unsafe_allow_html=True
-            )
-        else:
-            is_emerg = any(kw in msg["content"] for kw in ["🚨", "hospital IMMEDIATELY", "108"])
-            bubble = "emergency-bubble" if is_emerg else "bot-bubble"
-            st.markdown(
-                f'<div class="{bubble}"><div class="msg-label">🌿 Swasthya Mitra</div>{msg["content"]}</div>',
-                unsafe_allow_html=True
-            )
+# Show welcome if no messages yet
+if not st.session_state.messages:
+    with st.chat_message("assistant", avatar="🌿"):
+        st.markdown(WELCOME[lang])
 
-# ─── QUICK PROMPTS ────────────────────────────────────────────────────────────
-st.markdown("<br>**Quick prompts:**", unsafe_allow_html=True)
-prompts = QUICK_PROMPTS.get(st.session_state.language, QUICK_PROMPTS["English"])
-cols = st.columns(len(prompts))
-for i, (col, prompt) in enumerate(zip(cols, prompts)):
+# Render all stored messages
+for msg in st.session_state.messages:
+    avatar = "🧑" if msg["role"] == "user" else "🌿"
+    with st.chat_message(msg["role"], avatar=avatar):
+        st.markdown(msg["content"])
+
+# ── QUICK PROMPTS ─────────────────────────────────────────────────────────────
+st.markdown("**Quick prompts:**")
+prompts = QUICK_PROMPTS[lang]
+qc = st.columns(len(prompts))
+for i, (col, p) in enumerate(zip(qc, prompts)):
     with col:
-        if st.button(prompt, key=f"qp_{i}", use_container_width=True):
-            st.session_state["quick_prompt"] = prompt
+        if st.button(p, key=f"qp{i}", use_container_width=True):
+            st.session_state.pending_prompt = p
 
-# ─── INPUT AREA ───────────────────────────────────────────────────────────────
+# ── MIC INPUT (optional voice) ────────────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)
 
-PLACEHOLDERS = {
-    "English": "Type here... (health question, prescription text, or just talk 🙏)",
-    "Kannada": "ಇಲ್ಲಿ ಟೈಪ್ ಮಾಡಿ...",
-    "Hindi":   "यहाँ लिखें...",
-    "Telugu":  "ఇక్కడ టైప్ చేయండి...",
-}
+try:
+    from streamlit_mic_recorder import mic_recorder
+    import speech_recognition as sr, io
 
-default_val = st.session_state.pop("quick_prompt", "")
+    with st.expander("🎤 Voice Input — Click to expand and record"):
+        st.markdown(f"**Speak in {lang}** → recording will convert to text automatically")
+        audio = mic_recorder(
+            start_prompt="🎤 Start Speaking",
+            stop_prompt="⏹️ Stop Recording",
+            just_once=True,
+            use_container_width=True,
+            key="mic"
+        )
+        if audio and audio.get("bytes"):
+            recognizer = sr.Recognizer()
+            try:
+                audio_file = io.BytesIO(audio["bytes"])
+                with sr.AudioFile(audio_file) as source:
+                    audio_data = recognizer.record(source)
+                transcript = recognizer.recognize_google(
+                    audio_data, language=MIC_LANGS.get(lang, "en-IN")
+                )
+                if transcript:
+                    st.success(f'🎤 Heard: **"{transcript}"**')
+                    st.session_state.pending_prompt = transcript
+                    st.rerun()
+            except sr.UnknownValueError:
+                st.warning("Could not understand. Please speak clearly and try again.")
+            except Exception as e:
+                st.error(f"Voice error: {e}")
+except ImportError:
+    with st.expander("🎤 Voice Input — Install to enable"):
+        st.info("Run this to enable voice:\n```\npip install streamlit-mic-recorder SpeechRecognition\n```")
 
-user_input = st.text_area(
-    "Message",
-    value=default_val,
-    placeholder=PLACEHOLDERS.get(st.session_state.language, PLACEHOLDERS["English"]),
-    height=100,
-    label_visibility="collapsed",
+# ── PROCESS PENDING PROMPT (from quick button or mic) ─────────────────────────
+if st.session_state.pending_prompt:
+    prompt = st.session_state.pending_prompt
+    st.session_state.pending_prompt = None
+    if st.session_state.api_key:
+        with st.spinner("🌿 Swasthya Mitra is thinking..."):
+            process_message(prompt)
+    else:
+        st.warning("Please add your Gemini API key in the sidebar first.")
+
+# ── CHAT INPUT (always visible at bottom, native Streamlit) ───────────────────
+user_input = st.chat_input(
+    placeholder=PLACEHOLDERS.get(lang, PLACEHOLDERS["English"])
 )
 
-col_a, col_b = st.columns([3, 1])
-with col_a:
-    send = st.button("🌿 Send Message", type="primary", use_container_width=True)
-with col_b:
-    if st.button("✕ Clear", use_container_width=True):
-        st.rerun()
-
-# ─── SEND LOGIC ───────────────────────────────────────────────────────────────
-if send and user_input.strip():
+if user_input:
     if not st.session_state.api_key:
-        st.error("Please enter your Google Gemini API key in the sidebar first.")
-    else:
-        text = user_input.strip()
-        st.session_state.messages.append({"role": "user", "content": text})
+        st.warning("⚠️ Please enter your Gemini API key in the sidebar first.")
+        st.stop()
+    with st.spinner("🌿 Swasthya Mitra is thinking..."):
+        process_message(user_input)
 
-        if is_emergency(text):
-            reply = EMERGENCY_RESPONSE.get(st.session_state.language, EMERGENCY_RESPONSE["English"])
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-            st.rerun()
-        else:
-            with st.spinner("Swasthya Mitra is thinking... 🌿"):
-                try:
-                    reply = get_gemini_response(text)
-                    st.session_state.messages.append({"role": "assistant", "content": reply})
-
-                    if any(kw in text.lower() for kw in ["remind", "reminder", "याद", "ರಿಮೈಂಡರ್", "రిమైండర్"]):
-                        st.toast("💊 Add reminders quickly in the sidebar!", icon="⏰")
-
-                except Exception as e:
-                    err = str(e)
-                    if "API_KEY" in err.upper() or "invalid" in err.lower():
-                        st.error("❌ Invalid API key. Please check your Gemini key in the sidebar.")
-                    elif "quota" in err.lower():
-                        st.error("❌ API quota exceeded. Try again later or check your Google AI Studio plan.")
-                    else:
-                        st.error(f"❌ Error: {err}")
-                    st.session_state.messages.pop()  # remove failed user message
-
-            st.rerun()
-
-# ─── FOOTER ───────────────────────────────────────────────────────────────────
-st.markdown("<br>", unsafe_allow_html=True)
+# ── FOOTER ────────────────────────────────────────────────────────────────────
 st.markdown(
-    '<div style="text-align:center;font-size:12px;color:#aaa;padding:10px;">'
-    '⚕️ Swasthya Mitra AI provides general health guidance only — not medical diagnosis.<br>'
-    'Always consult a qualified doctor for medical advice. &nbsp;|&nbsp; Emergency: Call <b>108</b>'
+    '<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0 4px;">'
+    '⚕️ General health guidance only — not a medical diagnosis. '
+    'Always consult a qualified doctor. | Emergency: <b>108</b>'
     '</div>',
     unsafe_allow_html=True
 )
