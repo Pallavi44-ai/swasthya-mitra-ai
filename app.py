@@ -247,7 +247,7 @@ def call_gemini(user_text: str) -> str:
     client = genai.Client(api_key=API_KEY)
 
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model_name="gemini-2.0-flash",
         contents=user_text
     )
 
